@@ -124,6 +124,22 @@ class URLExpander {
         //get and display what you need:
         $title = $nodes->item(0)->nodeValue;
 
+        //TERI - null causing problems with url expander; column can't be null. if null, let's try again
+        if($title === null) {
+
+            $nodes = $doc->getElementsByTagName('h1');
+
+            //get and display what you need:
+            $title = $nodes->item(0)->nodeValue;
+
+        }
+        //TERI - if still null, let's punt
+        if($title === null) {
+            $title = '';
+        } else if (strlen($title) > 255) { //or causing trouble when too long too.
+            $description = substr($title, 0, 255);
+        }
+
         $metas = $doc->getElementsByTagName('meta');
 
         $description = null;
@@ -132,6 +148,12 @@ class URLExpander {
             if ($meta->getAttribute('name') == 'description') {
                 $description = $meta->getAttribute('content');
             }
+        }
+        //TERI - null causing problems with url expander; column can't be null
+        if($description === null) {
+            $description = '';
+        } else if (strlen($description) > 255) { //or causing trouble when too long too.
+            $description = substr($description, 0, 255);
         }
         //<link rel="shortcut icon" type="image/x-icon" href="/demo/ginatrapani/assets/img/favicon.png">
         //        $favicon = null;
@@ -142,6 +164,9 @@ class URLExpander {
         //                $favicon = $meta->getAttribute('href');
         //            }
         //        }
+
+
+
         return array('title'=>$title, 'description'=>$description);
     }
 }
