@@ -178,7 +178,10 @@ class FacebookCrawler {
 
                 if (isset($stream->paging->next)  && strtotime ($stream->data[count($stream->data) -1]->created_time ) > strtotime("-6 months")
                 ) {
-                    $next_api_request = $stream->paging->next . '&since=' . $since;
+                   // $next_api_request = $stream->paging->next . '&since=' . $since;
+
+                    $next_api_request = $stream->paging->next ;
+
                     $current_page_number++;
                 } else {
                     $fetch_next_page = false;
@@ -255,34 +258,39 @@ class FacebookCrawler {
             //get first page of likes
             $likes_stream = FacebookGraphAPIAccessor::rawApiRequest('https://graph.facebook.com/' . $post_id . '/likes?summary=1');
             //and the count
-            $likes_count = $likes_stream->summary->total_count;
+            $likes_count = isset($likes_stream->summary->total_count)? $likes_stream->summary->total_count : 0;
+            //get actual stored likes count - could differ from the count stored with the post
+            $stored_likes_count = $post_dao->countStoredLikes($post_id, $network);
+
 
             //get first page of comments
             $comments_stream = FacebookGraphAPIAccessor::rawApiRequest('https://graph.facebook.com/' . $post_id . '/comments?summary=1');
             //and the count
-            $post_comments_count = $comments_stream->summary->total_count;
+            $post_comments_count = isset($comments_stream->summary->total_count)? $comments_stream->summary->total_count : 0;
+            //get actual stored likes count - could differ from the count stored with the post
+            $stored_comments_count = $post_dao->countStoredComments($post_id, $network);
 
 
             //Figure out if we have to process likes and comments
             if (isset($post_in_storage)) {
                 $this->logger->logInfo("Post ".$post_id. " already in storage", __METHOD__.','.__LINE__);
-                if ($post_in_storage->favlike_count_cache != $likes_count) {
+                if ($stored_likes_count == $likes_count) {
                     $must_process_likes = false;
-                    $this->logger->logInfo("Already have ".$likes_count." like(s) for post ".$post_id.
+                    $this->logger->logInfo("Already have ". $likes_count." like(s) for post ".$post_id.
                     "in storage; skipping like processing", __METHOD__.','.__LINE__);
                 }
 
-                if (isset($p->comments->count)) {
-                    if ($post_in_storage->reply_count_cache != $post_comments_count) {
-                        $must_process_comments = false;
-                        $this->logger->logInfo("Already have ". $post_comments_count ." comment(s) for post ".$post_id.
-                        "; skipping comment processing", __METHOD__.','.__LINE__);
-                    } else {
-                        $comments_difference = $post_comments_count- $post_in_storage->reply_count_cache;
-                        $this->logger->logInfo($comments_difference." new comment(s) of ".$post_comments_count.
-                        " total to process for post ".$post_id, __METHOD__.','.__LINE__);
-                    }
+
+                if ($stored_comments_count == $post_comments_count) {
+                    $must_process_comments = false;
+                    $this->logger->logInfo("Already have ". $stored_comments_count ." comment(s) for post ".$post_id.
+                    "; skipping comment processing", __METHOD__.','.__LINE__);
+                } else {
+                    $comments_difference = $post_comments_count- $stored_comments_count;
+                    $this->logger->logInfo($comments_difference." new comment(s) of ".$post_comments_count.
+                    " total to process for post ".$post_id, __METHOD__.','.__LINE__);
                 }
+
             } else {
                 $this->logger->logInfo("Post ".$post_id. " not in storage", __METHOD__.','.__LINE__);
             }
@@ -291,13 +299,40 @@ class FacebookCrawler {
                 $this->logger->logError("No profile set", __METHOD__.','.__LINE__);
             } else {
                 if (!isset($post_in_storage)) {
+                    $post_text = array();
+                    //types - status, photo,
+                    if(isset($p->name)) {
+                        $post_text[] = $p->name;
+                    }
+                    if(isset($p->story)) {
+                        $post_text[] = $p->story;
+                    }
+/*
+                    if(isset($p->picture)) {
+                        $post_text[] = $p->picture;
+                    }
+                    if(isset($p->caption)) {
+                        $post_text[] = $p->caption;
+                    }
+*/
+                    if(isset($p->description)) {
+                        echo " hi teri might have link ";
+                        $post_text[] = $p->description;
+                    }
+                   if(isset($p->message)) {
+                       $post_text[] = $p->message;
+                   }
+
+                    $post_text = implode(' : ', $post_text);
+
+
                     $post_to_process = array(
                       "post_id"=>$post_id,
                       "author_username"=>$profile->username,
                       "author_fullname"=>$profile->username,
                       "author_avatar"=>$profile->avatar,
                       "author_user_id"=>$p->from->id,
-                      "post_text"=>isset($p->message)?$p->message:'',
+                      "post_text" => $post_text,
                       "pub_date"=>$p->created_time,
                       "favlike_count_cache"=>$likes_count,
                       "in_reply_to_user_id"=> isset($p->to->data[0]->id) ? $p->to->data[0]->id : '', // assume only one recipient
@@ -343,7 +378,7 @@ class FacebookCrawler {
                  * START COMMENTS
                  *********************************************************************************************/
                 $failover = 0 ;
-                $must_process_comments = true;
+               // $must_process_comments = true;
                 if ($must_process_comments && $post_comments_count != 0) {
                         $comments_captured = 0;
 
@@ -352,8 +387,7 @@ class FacebookCrawler {
                         $thinkup_posts = array();
 
 
-                        $api_call = $p->comments->paging->next;
-                        //$this->logger->logInfo("API call ".$api_call, __METHOD__.','.__LINE__);
+                        $this->logger->logInfo("processing comments ", __METHOD__.','.__LINE__);
                         do {
                             $failover = $failover + 1;
                             //no one likes us this much now
@@ -375,8 +409,8 @@ class FacebookCrawler {
                                                 "post_id" => $comment_id,
                                                 "author_username" => $c->from->name,
                                                 "author_fullname" => $c->from->name,
-                                                "author_avatar" => 'https://graph.facebook.com/' . $c->from->id.'/picture',
-                                                "author_user_id "=> $c->from->id,
+                                                "author_avatar" => 'https://graph.facebook.com/' . $c->from->id . '/picture',
+                                                "author_user_id"=> $c->from->id,
                                                 "post_text" => $c->message,
                                                 "pub_date" => $c->created_time,
                                                 "in_reply_to_user_id" => $profile->user_id,
@@ -387,6 +421,9 @@ class FacebookCrawler {
                                                 'location' => ''
                                             );
                                             array_push($thinkup_posts, $comment_to_process);
+
+                                            $this->logger->logInfo("Added c-id ".$c->from->id ." comment_to_process author_user_id". $comment_to_process->author_user_id,
+                                                __METHOD__.','.__LINE__);
                                         }
                                     }
                                 }
@@ -432,19 +469,11 @@ class FacebookCrawler {
                  *********************************************************************************************/
                 $failover = 0;
                 //process "likes"
-                $must_process_likes = true;
+                //$must_process_likes = true;
                 if ($must_process_likes) {
                         $likes_captured = 0;
 
 
-                        $total_added_users = $total_added_users + $this->storeUsers($thinkup_users, "Likes");
-                        $post_likes_added = $post_likes_added + $this->storeLikes($thinkup_likes);
-
-                        //free up memory
-                        $thinkup_users = array();
-                        $thinkup_likes = array();
-
-                        // collapsed likes
 
 
                         do {
@@ -467,8 +496,12 @@ class FacebookCrawler {
                                         "network"=>'facebook'); //Users are always set to network=facebook
                                         array_push($thinkup_users, $user_to_add);
 
-                                        $fav_to_add = array("favoriter_id"=>$l->id, "network"=>$network,
-                                       "author_user_id"=>$p->from->id, "post_id"=>$post_id);
+                                        $fav_to_add = array(
+                                            "favoriter_id" => $l->id,
+                                            "network"=>$network,
+                                            "author_user_id" => $p->from->id,
+                                            "post_id" => $post_id
+                                        );
                                         array_push($thinkup_likes, $fav_to_add);
                                         $likes_captured = $likes_captured + 1;
                                     }

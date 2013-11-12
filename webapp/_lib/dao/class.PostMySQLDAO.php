@@ -2489,6 +2489,52 @@ class PostMySQLDAO extends PDODAO implements PostDAO  {
         return (int)$result['count'];
     }
 
+    public function countStoredLikes($post_id, $network) {
+        $q = "SELECT COUNT(*) AS count FROM #prefix#favorites AS p ";
+        $q .= "WHERE p.post_id=:post_id AND p.network=:network ";
+        $vars = array(
+            ':post_id'=>$post_id,
+            ':network'=>$network
+        );
+
+        if ($this->profiler_enabled) { Profiler::setDAOMethod(__METHOD__); }
+        $ps = $this->execute($q, $vars);
+        $result = $this->getDataRowAsArray($ps);
+
+        return (int)$result['count'];
+    }
+
+    public function getStoredLikeIds($post_id, $network) {
+        $q = "SELECT COUNT(*) AS count FROM #prefix#favorites AS p ";
+        $q .= "WHERE p.post_id=:post_id AND p.network=:network ";
+        $vars = array(
+            ':post_id'=>$post_id,
+            ':network'=>$network
+        );
+
+        if ($this->profiler_enabled) { Profiler::setDAOMethod(__METHOD__); }
+        $ps = $this->execute($q, $vars);
+        $result = $this->getDataRowAsArray($ps);
+
+        return (int)$result['count'];
+    }
+
+    public function countStoredComments($post_id, $network) {
+        $q = "SELECT COUNT(*) AS count FROM #prefix#posts AS p ";
+        $q .= "WHERE p.in_reply_to_post_id = :post_id AND p.network = :network ";
+        $vars = array(
+            ':post_id'=>$post_id,
+            ':network'=>$network
+        );
+
+        if ($this->profiler_enabled) { Profiler::setDAOMethod(__METHOD__); }
+        $ps = $this->execute($q, $vars);
+        $result = $this->getDataRowAsArray($ps);
+
+        return (int)$result['count'];
+    }
+
+
     public function searchPostsByUser(array $keywords, $network, $author_username, $page_number=1, $page_count=20) {
         if (!is_array($keywords)) {
             return null;

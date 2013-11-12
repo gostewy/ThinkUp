@@ -748,6 +748,22 @@ interface PostDAO {
     public function countAllPostsByUserSinceDaysAgo($author_id, $network, $days_ago=7);
 
     /**
+     * Count the number of likes stored for a post
+     * @param int $post_id
+     * @param str $network
+     * @return int posts count
+     */
+    public function countStoredLikes($post_id, $network);
+
+    /**
+     * Count the number of comments stored for a post
+     * @param int $post_id
+     * @param str $network
+     * @return int posts count
+     */
+    public function countStoredComments($post_id, $network);
+
+    /**
      * Search a service users's posts.
      * @param arr $keywords
      * @param str $network
